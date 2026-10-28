@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'dart:math' as math;
 
 class LiveMapScreen extends StatefulWidget {
-  const LiveMapScreen({Key? key}) : super(key: key);
+  const LiveMapScreen({super.key});
 
   @override
   State<LiveMapScreen> createState() => _LiveMapScreenState();
 }
 
 class _LiveMapScreenState extends State<LiveMapScreen> {
-
   // App Colors
   static const Color primaryColor = Color(0xFF6366F1);
   static const Color backgroundColor = Color(0xFFF8FAFC);
@@ -20,25 +19,18 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
   static const Color textColor = Color(0xFF1F2937);
   static const Color hintColor = Color(0xFF9CA3AF);
   static const Color successColor = Color(0xFF10B981);
-  static const Color errorColor = Color(0xFFEF4444);
   static const Color warningColor = Color(0xFFF59E0B);
 
-  static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  late GoogleMapController mapController;
+  final MapController mapController = MapController();
   LatLng? currentLocation;
   bool isLoadingLocation = true;
   String locationStatus = "Getting your location...";
-  Location location = Location();
+  final Location location = Location();
 
   // Demo markers for spending locations and alerts
   List<Marker> spendingMarkers = [];
   List<Marker> alertMarkers = [];
-  Set<Circle> spendingCircles = {};
+  List<CircleMarker> spendingCircles = [];
 
   bool showSpendingLocations = true;
   bool showNearbyAlerts = true;
@@ -59,12 +51,7 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
     });
 
     try {
-      bool serviceEnabled;
-      PermissionStatus permissionGranted;
-      LocationData locationData;
-
-      // Check if location service is enabled
-      serviceEnabled = await location.serviceEnabled();
+      bool serviceEnabled = await location.serviceEnabled();
       if (!serviceEnabled) {
         serviceEnabled = await location.requestService();
         if (!serviceEnabled) {
@@ -77,8 +64,7 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
         }
       }
 
-      // Check for location permission
-      permissionGranted = await location.hasPermission();
+      PermissionStatus permissionGranted = await location.hasPermission();
       if (permissionGranted == PermissionStatus.denied) {
         permissionGranted = await location.requestPermission();
         if (permissionGranted != PermissionStatus.granted) {
@@ -91,24 +77,20 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
         }
       }
 
-      // Get current location
-      locationData = await location.getLocation();
+      LocationData locationData = await location.getLocation();
+      final double lat = locationData.latitude;
+      final double lng = locationData.longitude;
+      final newLocation = LatLng(lat, lng);
 
       setState(() {
-        currentLocation = LatLng(locationData.latitude!, locationData.longitude!);
-        center = currentLocation!;
+        currentLocation = newLocation;
+        center = newLocation;
         locationStatus = "Location found";
         isLoadingLocation = false;
       });
 
-      // Update markers based on current location
-      _updateMarkersForLocation(currentLocation!);
-
-      // Move camera to current location
-      mapController.animateCamera(
-        CameraUpdate.newLatLngZoom(currentLocation!, 14),
-      );
-
+      _updateMarkersForLocation(newLocation);
+      mapController.move(newLocation, 14.0);
     } catch (e) {
       setState(() {
         locationStatus = "Error getting location: ${e.toString()}";
@@ -119,190 +101,263 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
   }
 
   void _updateMarkersForLocation(LatLng userLocation) {
-    // Generate nearby spending locations based on user location
-    spendingMarkers = [
-      Marker(
-        markerId: const MarkerId('phoenix_mall'),
-        position: LatLng(
-            userLocation.latitude + 0.01,
-            userLocation.longitude + 0.01
+    setState(() {
+      spendingMarkers = [
+        _buildSpendingMarker(
+          id: 'phoenix_mall',
+          point: LatLng(userLocation.latitude + 0.01, userLocation.longitude + 0.01),
+          title: "Phoenix Mall",
+          amount: "₹4,500",
+          category: "Shopping",
+          transactions: 12,
+          color: const Color(0xFFEC4899),
+          icon: Icons.shopping_bag,
         ),
-        infoWindow: const InfoWindow(
-            title: "Phoenix Mall",
-            snippet: "₹4,500 spent • 12 transactions"
+        _buildSpendingMarker(
+          id: 'cafe_coffee_day',
+          point: LatLng(userLocation.latitude - 0.008, userLocation.longitude + 0.012),
+          title: "Cafe Coffee Day",
+          amount: "₹1,200",
+          category: "Food & Dining",
+          transactions: 8,
+          color: const Color(0xFFEF4444),
+          icon: Icons.local_cafe,
         ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueMagenta),
-        onTap: () => _showLocationDetails("Phoenix Mall", "₹4,500", "Shopping", 12),
-      ),
-      Marker(
-        markerId: const MarkerId('cafe_coffee_day'),
-        position: LatLng(
-            userLocation.latitude - 0.008,
-            userLocation.longitude + 0.012
+        _buildSpendingMarker(
+          id: 'pvr_cinemas',
+          point: LatLng(userLocation.latitude + 0.015, userLocation.longitude - 0.01),
+          title: "PVR Cinemas",
+          amount: "₹2,800",
+          category: "Entertainment",
+          transactions: 5,
+          color: const Color(0xFF8B5CF6),
+          icon: Icons.movie,
         ),
-        infoWindow: const InfoWindow(
-            title: "Cafe Coffee Day",
-            snippet: "₹1,200 spent • 8 transactions"
+        _buildSpendingMarker(
+          id: 'metro_station',
+          point: LatLng(userLocation.latitude - 0.012, userLocation.longitude - 0.005),
+          title: "Metro Station",
+          amount: "₹3,200",
+          category: "Transportation",
+          transactions: 15,
+          color: const Color(0xFF06B6D4),
+          icon: Icons.directions_subway,
         ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        onTap: () => _showLocationDetails("Cafe Coffee Day", "₹1,200", "Food & Dining", 8),
-      ),
-      Marker(
-        markerId: const MarkerId('pvr_cinemas'),
-        position: LatLng(
-            userLocation.latitude + 0.015,
-            userLocation.longitude - 0.01
+        // User Location Marker
+        Marker(
+          point: userLocation,
+          width: 50,
+          height: 50,
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: primaryColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: primaryColor.withValues(alpha: 0.4),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.person,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+            ],
+          ),
         ),
-        infoWindow: const InfoWindow(
-            title: "PVR Cinemas",
-            snippet: "₹2,800 spent • 5 transactions"
-        ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
-        onTap: () => _showLocationDetails("PVR Cinemas", "₹2,800", "Entertainment", 5),
-      ),
-      Marker(
-        markerId: const MarkerId('metro_station'),
-        position: LatLng(
-            userLocation.latitude - 0.012,
-            userLocation.longitude - 0.005
-        ),
-        infoWindow: const InfoWindow(
-            title: "Metro Station",
-            snippet: "₹3,200 spent • 15 transactions"
-        ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-        onTap: () => _showLocationDetails("Metro Station", "₹3,200", "Transportation", 15),
-      ),
-    ];
+      ];
 
-    // Generate spending intensity circles
-    spendingCircles = {
-      Circle(
-        circleId: const CircleId('phoenix_mall_circle'),
-        center: LatLng(userLocation.latitude + 0.01, userLocation.longitude + 0.01),
-        radius: 2250, // Based on spending amount
-        fillColor: const Color(0xFFEC4899).withOpacity(0.2),
-        strokeColor: const Color(0xFFEC4899),
-        strokeWidth: 2,
-      ),
-      Circle(
-        circleId: const CircleId('cafe_circle'),
-        center: LatLng(userLocation.latitude - 0.008, userLocation.longitude + 0.012),
-        radius: 600,
-        fillColor: const Color(0xFFEF4444).withOpacity(0.2),
-        strokeColor: const Color(0xFFEF4444),
-        strokeWidth: 2,
-      ),
-      Circle(
-        circleId: const CircleId('pvr_circle'),
-        center: LatLng(userLocation.latitude + 0.015, userLocation.longitude - 0.01),
-        radius: 1400,
-        fillColor: const Color(0xFF8B5CF6).withOpacity(0.2),
-        strokeColor: const Color(0xFF8B5CF6),
-        strokeWidth: 2,
-      ),
-      Circle(
-        circleId: const CircleId('metro_circle'),
-        center: LatLng(userLocation.latitude - 0.012, userLocation.longitude - 0.005),
-        radius: 1600,
-        fillColor: const Color(0xFF06B6D4).withOpacity(0.2),
-        strokeColor: const Color(0xFF06B6D4),
-        strokeWidth: 2,
-      ),
-    };
+      spendingCircles = [
+        CircleMarker(
+          point: LatLng(userLocation.latitude + 0.01, userLocation.longitude + 0.01),
+          radius: 2250,
+          useRadiusInMeter: true,
+          color: const Color(0xFFEC4899).withValues(alpha: 0.18),
+          borderColor: const Color(0xFFEC4899),
+          borderStrokeWidth: 2,
+        ),
+        CircleMarker(
+          point: LatLng(userLocation.latitude - 0.008, userLocation.longitude + 0.012),
+          radius: 600,
+          useRadiusInMeter: true,
+          color: const Color(0xFFEF4444).withValues(alpha: 0.18),
+          borderColor: const Color(0xFFEF4444),
+          borderStrokeWidth: 2,
+        ),
+        CircleMarker(
+          point: LatLng(userLocation.latitude + 0.015, userLocation.longitude - 0.01),
+          radius: 1400,
+          useRadiusInMeter: true,
+          color: const Color(0xFF8B5CF6).withValues(alpha: 0.18),
+          borderColor: const Color(0xFF8B5CF6),
+          borderStrokeWidth: 2,
+        ),
+        CircleMarker(
+          point: LatLng(userLocation.latitude - 0.012, userLocation.longitude - 0.005),
+          radius: 1600,
+          useRadiusInMeter: true,
+          color: const Color(0xFF06B6D4).withValues(alpha: 0.18),
+          borderColor: const Color(0xFF06B6D4),
+          borderStrokeWidth: 2,
+        ),
+      ];
 
-    // Generate nearby financial alerts based on user location
-    alertMarkers = [
-      Marker(
-        markerId: const MarkerId('budget_alert'),
-        position: LatLng(
-            userLocation.latitude + 0.005,
-            userLocation.longitude - 0.008
+      alertMarkers = [
+        Marker(
+          point: LatLng(userLocation.latitude + 0.005, userLocation.longitude - 0.008),
+          width: 46,
+          height: 46,
+          child: GestureDetector(
+            onTap: _showBudgetAlert,
+            child: Container(
+              decoration: BoxDecoration(
+                color: warningColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: warningColor.withValues(alpha: 0.4),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 24),
+            ),
+          ),
         ),
-        infoWindow: const InfoWindow(
-            title: "Budget Alert Zone",
-            snippet: "You exceeded budget here last month!"
+        Marker(
+          point: LatLng(userLocation.latitude - 0.018, userLocation.longitude + 0.008),
+          width: 46,
+          height: 46,
+          child: GestureDetector(
+            onTap: _showSavingsOpportunity,
+            child: Container(
+              decoration: BoxDecoration(
+                color: successColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: successColor.withValues(alpha: 0.4),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.savings_outlined, color: Colors.white, size: 24),
+            ),
+          ),
         ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-        onTap: () => _showBudgetAlert(),
-      ),
-      Marker(
-        markerId: const MarkerId('saving_opportunity'),
-        position: LatLng(
-            userLocation.latitude - 0.018,
-            userLocation.longitude + 0.008
-        ),
-        infoWindow: const InfoWindow(
-            title: "Savings Opportunity",
-            snippet: "Cheaper alternatives available nearby"
-        ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        onTap: () => _showSavingsOpportunity(),
-      ),
-    ];
-
-    // Add user location marker
-    spendingMarkers.add(
-      Marker(
-        markerId: const MarkerId('user_location'),
-        position: userLocation,
-        infoWindow: const InfoWindow(
-            title: "You are here",
-            snippet: "Your current location"
-        ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-      ),
-    );
+      ];
+    });
   }
 
   void _setDefaultMarkers() {
-    // Fallback to default Mumbai markers if location fails
-    spendingMarkers = [
-      Marker(
-        markerId: const MarkerId('phoenix_mall'),
-        position: const LatLng(19.0896, 72.8656),
-        infoWindow: const InfoWindow(
-            title: "Phoenix Mall",
-            snippet: "₹4,500 spent • 12 transactions"
+    setState(() {
+      spendingMarkers = [
+        _buildSpendingMarker(
+          id: 'phoenix_mall',
+          point: const LatLng(19.0896, 72.8656),
+          title: "Phoenix Mall",
+          amount: "₹4,500",
+          category: "Shopping",
+          transactions: 12,
+          color: const Color(0xFFEC4899),
+          icon: Icons.shopping_bag,
         ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueMagenta),
-        onTap: () => _showLocationDetails("Phoenix Mall", "₹4,500", "Shopping", 12),
-      ),
-      Marker(
-        markerId: const MarkerId('cafe_coffee_day'),
-        position: const LatLng(19.0760, 72.8777),
-        infoWindow: const InfoWindow(
-            title: "Cafe Coffee Day",
-            snippet: "₹1,200 spent • 8 transactions"
+        _buildSpendingMarker(
+          id: 'cafe_coffee_day',
+          point: const LatLng(19.0760, 72.8777),
+          title: "Cafe Coffee Day",
+          amount: "₹1,200",
+          category: "Food & Dining",
+          transactions: 8,
+          color: const Color(0xFFEF4444),
+          icon: Icons.local_cafe,
         ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        onTap: () => _showLocationDetails("Cafe Coffee Day", "₹1,200", "Food & Dining", 8),
-      ),
-    ];
+      ];
 
-    alertMarkers = [
-      Marker(
-        markerId: const MarkerId('budget_alert'),
-        position: const LatLng(19.0540, 72.8570),
-        infoWindow: const InfoWindow(
-            title: "Budget Alert Zone",
-            snippet: "You exceeded budget here last month!"
+      alertMarkers = [
+        Marker(
+          point: const LatLng(19.0540, 72.8570),
+          width: 46,
+          height: 46,
+          child: GestureDetector(
+            onTap: _showBudgetAlert,
+            child: Container(
+              decoration: BoxDecoration(
+                color: warningColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: warningColor.withValues(alpha: 0.4),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 24),
+            ),
+          ),
         ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-        onTap: () => _showBudgetAlert(),
-      ),
-    ];
+      ];
 
-    spendingCircles = {
-      Circle(
-        circleId: const CircleId('phoenix_mall_circle'),
-        center: const LatLng(19.0896, 72.8656),
-        radius: 2250,
-        fillColor: const Color(0xFFEC4899).withOpacity(0.2),
-        strokeColor: const Color(0xFFEC4899),
-        strokeWidth: 2,
+      spendingCircles = [
+        CircleMarker(
+          point: const LatLng(19.0896, 72.8656),
+          radius: 2250,
+          useRadiusInMeter: true,
+          color: const Color(0xFFEC4899).withValues(alpha: 0.18),
+          borderColor: const Color(0xFFEC4899),
+          borderStrokeWidth: 2,
+        ),
+      ];
+    });
+  }
+
+  Marker _buildSpendingMarker({
+    required String id,
+    required LatLng point,
+    required String title,
+    required String amount,
+    required String category,
+    required int transactions,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Marker(
+      point: point,
+      width: 48,
+      height: 48,
+      child: GestureDetector(
+        onTap: () => _showLocationDetails(title, amount, category, transactions),
+        child: Container(
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2.5),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.4),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(icon, color: Colors.white, size: 24),
+        ),
       ),
-    };
+    );
   }
 
   void _showLocationDetails(String name, String amount, String category, int transactions) {
@@ -433,27 +488,29 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
       platformChannelSpecifics,
     );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Test notification sent!'),
-        backgroundColor: successColor,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Test notification sent!'),
+          backgroundColor: successColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    Set<Marker> markers = {};
-    Set<Circle> circles = {};
+    final List<Marker> activeMarkers = [];
+    final List<CircleMarker> activeCircles = [];
 
     if (showSpendingLocations) {
-      markers.addAll(spendingMarkers);
-      circles.addAll(spendingCircles);
+      activeMarkers.addAll(spendingMarkers);
+      activeCircles.addAll(spendingCircles);
     }
     if (showNearbyAlerts) {
-      markers.addAll(alertMarkers);
+      activeMarkers.addAll(alertMarkers);
     }
 
     return Scaffold(
@@ -468,14 +525,14 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
             ],
           ),
           child: IconButton(
-            icon: const Icon(Icons.arrow_back_ios, color: textColor),
+            icon: const Icon(Icons.arrow_back_ios_new, color: textColor, size: 18),
             onPressed: () => Navigator.pop(context),
           ),
         ),
@@ -497,7 +554,7 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -519,15 +576,15 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.1),
+                color: primaryColor.withValues(alpha: 0.1),
                 border: Border(
-                  bottom: BorderSide(color: primaryColor.withOpacity(0.2)),
+                  bottom: BorderSide(color: primaryColor.withValues(alpha: 0.2)),
                 ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SizedBox(
+                  const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
@@ -548,18 +605,18 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: successColor.withOpacity(0.1),
+                color: successColor.withValues(alpha: 0.1),
                 border: Border(
-                  bottom: BorderSide(color: successColor.withOpacity(0.2)),
+                  bottom: BorderSide(color: successColor.withValues(alpha: 0.2)),
                 ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.location_on, color: successColor, size: 20),
+                  const Icon(Icons.location_on, color: successColor, size: 20),
                   const SizedBox(width: 8),
-                  Text(
-                    "Showing spending locations near you",
+                  const Text(
+                    "Showing spending locations near you (OpenStreetMap)",
                     style: TextStyle(
                       color: successColor,
                       fontWeight: FontWeight.w500,
@@ -569,7 +626,7 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
               ),
             ),
 
-          // Map Area
+          // Map Area with OpenStreetMap
           Expanded(
             flex: 3,
             child: Container(
@@ -579,7 +636,7 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 15,
                     offset: const Offset(0, 5),
                   ),
@@ -587,27 +644,61 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
-                child: GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: center,
-                    zoom: 12,
-                  ),
-                  markers: markers,
-                  circles: circles,
-                  onMapCreated: (GoogleMapController controller) {
-                    mapController = controller;
-                    // If we already have current location, move to it
-                    if (currentLocation != null) {
-                      controller.animateCamera(
-                        CameraUpdate.newLatLngZoom(currentLocation!, 14),
-                      );
-                    }
-                  },
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: false,
-                  zoomControlsEnabled: false,
-                  mapType: MapType.normal,
-                  compassEnabled: true,
+                child: Stack(
+                  children: [
+                    FlutterMap(
+                      mapController: mapController,
+                      options: MapOptions(
+                        initialCenter: center,
+                        initialZoom: 13.5,
+                        minZoom: 3.0,
+                        maxZoom: 18.0,
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.example.greenai',
+                        ),
+                        if (showSpendingLocations && activeCircles.isNotEmpty)
+                          CircleLayer(circles: activeCircles),
+                        if (activeMarkers.isNotEmpty)
+                          MarkerLayer(markers: activeMarkers),
+                      ],
+                    ),
+                    // Floating Zoom Controls
+                    Positioned(
+                      right: 12,
+                      bottom: 12,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FloatingActionButton.small(
+                            heroTag: 'zoom_in',
+                            backgroundColor: surfaceColor,
+                            foregroundColor: textColor,
+                            elevation: 4,
+                            onPressed: () {
+                              final currentZoom = mapController.camera.zoom;
+                              mapController.move(mapController.camera.center, currentZoom + 1);
+                            },
+                            child: const Icon(Icons.add),
+                          ),
+                          const SizedBox(height: 8),
+                          FloatingActionButton.small(
+                            heroTag: 'zoom_out',
+                            backgroundColor: surfaceColor,
+                            foregroundColor: textColor,
+                            elevation: 4,
+                            onPressed: () {
+                              final currentZoom = mapController.camera.zoom;
+                              mapController.move(mapController.camera.center, currentZoom - 1);
+                            },
+                            child: const Icon(Icons.remove),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -621,7 +712,7 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, -2),
                 ),
@@ -655,7 +746,7 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         foregroundColor: successColor,
-                        side: BorderSide(color: successColor.withOpacity(0.3)),
+                        side: BorderSide(color: successColor.withValues(alpha: 0.3)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -690,7 +781,7 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
         width: double.infinity,
         height: 56,
         decoration: BoxDecoration(
-          color: selected ? color.withOpacity(0.1) : Colors.grey[50],
+          color: selected ? color.withValues(alpha: 0.1) : Colors.grey[50],
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected ? color : Colors.grey[300]!,
@@ -699,7 +790,7 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
           boxShadow: selected
               ? [
             BoxShadow(
-              color: color.withOpacity(0.2),
+              color: color.withValues(alpha: 0.2),
               blurRadius: 8,
               offset: const Offset(0, 2),
             )
