@@ -290,40 +290,32 @@ class HelplineScreen extends StatelessWidget {
   }
 
   void _makePhoneCall(String phoneNumber) async {
+    // Sanitize phone number (keep digits and leading plus)
+    final cleanNumber = phoneNumber.replaceAll(RegExp(r'[^0-9+]'), '');
+    final Uri launchUri = Uri(
+      scheme: 'tel',
+      path: cleanNumber,
+    );
+
     try {
-      final Uri launchUri = Uri(
-        scheme: 'tel',
-        path: phoneNumber,
+      final bool launched = await launchUrl(
+        launchUri,
+        mode: LaunchMode.externalApplication,
       );
 
-      if (await canLaunchUrl(launchUri)) {
+      if (!launched) {
+        // Fallback attempt without mode
         await launchUrl(launchUri);
-
-        // Show success feedback
-        Get.snackbar(
-          'Calling...',
-          'Connecting to $phoneNumber',
-          backgroundColor: const Color(0xFF4CAF50).withOpacity(0.9),
-          colorText: Colors.white,
-          snackPosition: SnackPosition.TOP,
-          duration: const Duration(seconds: 2),
-          icon: const Icon(Icons.phone, color: Colors.white),
-          margin: const EdgeInsets.all(16),
-          borderRadius: 12,
-        );
-      } else {
-        throw Exception('Could not launch phone dialer');
       }
     } catch (e) {
-      // Show error feedback
       Get.snackbar(
-        'Error',
-        'Could not launch phone dialer. Please try again.',
-        backgroundColor: Colors.red.withOpacity(0.9),
+        'Dialer Error',
+        'Could not open phone dialer for $phoneNumber: ${e.toString()}',
+        backgroundColor: Colors.red.withValues(alpha: 0.9),
         colorText: Colors.white,
         snackPosition: SnackPosition.TOP,
-        duration: const Duration(seconds: 3),
-        icon: const Icon(Icons.error, color: Colors.white),
+        duration: const Duration(seconds: 4),
+        icon: const Icon(Icons.error_outline, color: Colors.white),
         margin: const EdgeInsets.all(16),
         borderRadius: 12,
       );

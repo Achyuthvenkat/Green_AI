@@ -18,8 +18,13 @@ class _SignupScreenState extends State<SignupScreen> {
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
   final TextEditingController _landSizeController = TextEditingController();
+
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   List<String> _selectedCrops = [];
   String? _selectedLanguage;
@@ -87,6 +92,18 @@ class _SignupScreenState extends State<SignupScreen> {
   Future<void> _signup() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_passwordController.text != _confirmPasswordController.text) {
+      Get.snackbar('Password Mismatch', 'Passwords do not match',
+          backgroundColor: Colors.red, colorText: Colors.white);
+      return;
+    }
+
+    if (_passwordController.text.length < 6) {
+      Get.snackbar('Weak Password', 'Password must be at least 6 characters',
+          backgroundColor: Colors.red, colorText: Colors.white);
+      return;
+    }
+
     if (_selectedLanguage == null) {
       Get.snackbar('Error', 'Please select a Language');
       return;
@@ -113,6 +130,7 @@ class _SignupScreenState extends State<SignupScreen> {
         body: jsonEncode({
           "name": _nameController.text.trim(),
           "email": _emailController.text.trim(),
+          "password": _passwordController.text,
           "mobile": _mobileController.text.trim(),
           "language": _selectedLanguage,
           "crops": _selectedCrops.join(", "),
@@ -154,8 +172,14 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
-  Widget _buildTextField(String label, TextEditingController controller,
-      {TextInputType keyboardType = TextInputType.text}) {
+  Widget _buildTextField(
+    String label,
+    TextEditingController controller, {
+    TextInputType keyboardType = TextInputType.text,
+    bool obscureText = false,
+    Widget? suffixIcon,
+    String? Function(String?)? customValidator,
+  }) {
     return Container(
       decoration: BoxDecoration(
           color: const Color(0xFF81B784),
@@ -169,12 +193,15 @@ class _SignupScreenState extends State<SignupScreen> {
       child: TextFormField(
         controller: controller,
         keyboardType: keyboardType,
-        validator: (val) => val == null || val.isEmpty ? 'Enter $label' : null,
+        obscureText: obscureText,
+        validator: customValidator ??
+            (val) => val == null || val.isEmpty ? 'Enter $label' : null,
         decoration: InputDecoration(
           hintText: label,
           border: InputBorder.none,
           contentPadding:
-          const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          suffixIcon: suffixIcon,
         ),
       ),
     );
@@ -285,6 +312,50 @@ class _SignupScreenState extends State<SignupScreen> {
               const SizedBox(height: 16),
               _buildTextField('Email', _emailController,
                   keyboardType: TextInputType.emailAddress),
+              const SizedBox(height: 16),
+              _buildTextField(
+                'Password',
+                _passwordController,
+                obscureText: _obscurePassword,
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.white,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                ),
+                customValidator: (val) {
+                  if (val == null || val.isEmpty) return 'Enter Password';
+                  if (val.length < 6) return 'Password must be at least 6 chars';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                'Confirm Password',
+                _confirmPasswordController,
+                obscureText: _obscureConfirmPassword,
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.white,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscureConfirmPassword = !_obscureConfirmPassword;
+                    });
+                  },
+                ),
+                customValidator: (val) {
+                  if (val == null || val.isEmpty) return 'Confirm your password';
+                  if (val != _passwordController.text) return 'Passwords do not match';
+                  return null;
+                },
+              ),
               const SizedBox(height: 16),
               _buildTextField('Mobile', _mobileController,
                   keyboardType: TextInputType.phone),

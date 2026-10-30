@@ -38,6 +38,7 @@ class UserDetails(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), nullable=False)
+    password = db.Column(db.String(255), nullable=True)
     mobile = db.Column(db.String(255), nullable=False)
     language = db.Column(db.String(255), nullable=False)
     location = db.Column(db.String(255), nullable=False)
@@ -48,9 +49,13 @@ class UserDetails(db.Model):
 def add_userdetails():
     try:
         data = request.get_json()
+        raw_password = data.get('password')
+        password_hash = generate_password_hash(raw_password) if raw_password else None
+
         user = UserDetails(
             name = data.get('name'),
             email = data.get('email'),
+            password = password_hash,
             mobile = data.get('mobile'),
             language = data.get('language'),
             location = data.get('location'),
@@ -175,16 +180,25 @@ def check_email():
     try:
         data = request.get_json()
         email = data.get("email")
+        password = data.get("password")
         if not email:
             return jsonify({"status": "error", "message": "Email is required"}), 400
 
         # Query the UserDetails table to check if email exists
         user = UserDetails.query.filter_by(email=email).first()
 
-        if user:
-            return jsonify({"status": "success", "message": "Email exists"}), 200
-        else:
+        if not user:
             return jsonify({"status": "error", "message": "Email not registered"}), 404
+
+        # If password is provided, verify it
+        if password is not None:
+            if not user.password:
+                # If user had no password set previously, allow fallback or direct match
+                pass
+            elif not check_password_hash(user.password, password):
+                return jsonify({"status": "error", "message": "Incorrect password"}), 401
+
+        return jsonify({"status": "success", "message": "Login successful", "name": user.name}), 200
     except Exception as e:
         print(f"Error in check_email: {e}")
         return jsonify({"status": "error", "message": "Internal server error"}), 500

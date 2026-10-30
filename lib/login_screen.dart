@@ -13,18 +13,36 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
-  Future<bool> checkEmailExists(String email) async {
-    final url = Uri.parse('${Url.Urls}/check_email');
-    final response = await http.post(url,
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<Map<String, dynamic>> _loginUser(String email, String password) async {
+    try {
+      final url = Uri.parse('${Url.Urls}/check_email');
+      final response = await http.post(
+        url,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({"email": email}));
-    if (response.statusCode == 200) {
-      var data = jsonDecode(response.body);
-      return data['status'] == 'success';
+        body: jsonEncode({"email": email, "password": password}),
+      );
+      final data = jsonDecode(response.body);
+      return {
+        'success': response.statusCode == 200 && data['status'] == 'success',
+        'message': data['message'] ?? 'Login failed',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Could not connect to server: ${e.toString()}',
+      };
     }
-    return false;
   }
 
   Future<void> _addActiveUser(String email) async {
@@ -36,9 +54,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _onLoginPressed() async {
     final email = _emailController.text.trim();
+    final password = _passwordController.text;
 
     if (email.isEmpty || !email.contains('@')) {
       Get.snackbar('Invalid Email', 'Please enter a valid email address',
+          backgroundColor: Colors.red, colorText: Colors.white);
+      return;
+    }
+
+    if (password.isEmpty) {
+      Get.snackbar('Password Required', 'Please enter your password',
           backgroundColor: Colors.red, colorText: Colors.white);
       return;
     }
@@ -47,13 +72,13 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = true;
     });
 
-    bool exists = await checkEmailExists(email);
+    final loginResult = await _loginUser(email, password);
 
-    if (!exists) {
+    if (!loginResult['success']) {
       setState(() {
         _isLoading = false;
       });
-      Get.snackbar('Email Not Registered', 'Please sign up first',
+      Get.snackbar('Login Failed', loginResult['message'],
           backgroundColor: Colors.red, colorText: Colors.white);
       return;
     }
@@ -159,6 +184,53 @@ class _LoginScreenState extends State<LoginScreen> {
                       fontWeight: FontWeight.w500,
                     ),
                     keyboardType: TextInputType.emailAddress,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF81C784),
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: TextField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
+                      hintText: 'Password',
+                      hintStyle: const TextStyle(
+                        color: Colors.black54,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      border: InputBorder.none,
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                          color: Colors.black54,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
+                    ),
+                    style: const TextStyle(
+                      color: Colors.black87,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
